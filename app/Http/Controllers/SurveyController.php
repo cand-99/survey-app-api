@@ -2,17 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Survey;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
-use Illuminate\Http\Request;
-use App\Models\SurveyQuestion;
-use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\File;
+
+use App\Http\Requests\StoreSurveyAnswerRequest;
 use App\Http\Resources\SurveyResource;
+use App\Models\Survey;
 use App\Http\Requests\StoreSurveyRequest;
-use Illuminate\Support\Facades\Validator;
 use App\Http\Requests\UpdateSurveyRequest;
+use App\Models\SurveyAnswer;
+use App\Models\SurveyQuestion;
+use App\Models\SurveyQuestionAnswer;
+use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class SurveyController extends Controller
 {
@@ -24,7 +28,7 @@ class SurveyController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        return SurveyResource::collection(Survey::where('user_id', $user->id)->paginate());
+        return SurveyResource::collection(Survey::where('user_id', $user->id)->paginate(3));
     }
 
     /**
@@ -65,6 +69,12 @@ class SurveyController extends Controller
         if ($user->id !== $survey->user_id){
             return abort(403, 'Unauthorize action.');
         }
+
+        return new SurveyResource($survey);
+    }
+
+    public function showForGuest(Survey $survey)
+    {
 
         return new SurveyResource($survey);
     }
@@ -183,6 +193,37 @@ class SurveyController extends Controller
         file_put_contents($relativePath, $image);
 
         return $relativePath;
+    }
+
+    public function storeAnswer(Survey $survey ,StoreSurveyAnswerRequest $request)
+    {
+        $validated = $request->validated();
+    //    var_dump($validated, $survey);
+                   
+
+        $surveyAnswer = SurveyAnswer::create([
+            'survey_id' => $survey->id,
+            'start_date' => date('Y-m-d H:i:s'),
+            'end_date' => date('Y-m-d H:i:s'),
+        ]);
+
+        foreach ($validated['answers'] as $questionId => $answer) {
+            $question = SurveyQuestion::where(['id' => $questionId, 'survey_id' => $survey->id])->get();
+            if (!$question) {
+                return response("Invalid question ID: \"$questionId\"", 400);
+            }
+
+            $data = [
+                'survey_question_id' => $questionId,
+                'survey_answer_id' => $surveyAnswer->id,
+                'answer' => is_array($answer) ? json_encode($answer) : $answer
+            ];
+
+            $questionAnswer = SurveyQuestionAnswer::create($data);
+        }
+
+        return response("", 201);
+
     }
 
     private function createQuestion($data)
